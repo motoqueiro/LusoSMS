@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LusoSMS.Client", "LusoSMS.C
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{A50E5266-02A2-4B69-84D9-87E09047DCDF}"
 	ProjectSection(SolutionItems) = preProject
+		Documentation\API LusoSms.pdf = Documentation\API LusoSms.pdf
+		Documentation\Price Matrix.xlsx = Documentation\Price Matrix.xlsx
 		README.md = README.md
 		xunit.runner.json = xunit.runner.json
 	EndProjectSection

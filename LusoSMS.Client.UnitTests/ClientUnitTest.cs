@@ -1,6 +1,8 @@
 ﻿namespace LusoSMS.Client.UnitTests
 {
     using Flurl.Http.Testing;
+    using LusoSMS.Client.Entities;
+    using LusoSMS.Client.Enums;
     using SimpleFixture;
     using System;
     using System.Net.Http;
@@ -19,7 +21,7 @@
 
         private readonly string _password;
 
-        private readonly Client _client;
+        private readonly LusoSMSClient _client;
 
         public ClientUnitTest()
         {
@@ -27,7 +29,7 @@
             this._httpTest = new HttpTest();
             this._username = this._fixture.Generate<string>();
             this._password = this._fixture.Generate<string>();
-            this._client = new Client(
+            this._client = new LusoSMSClient(
                 this._username,
                 this._password);
         }
@@ -38,9 +40,44 @@
         }
 
         [Fact]
+        [Trait("Category", "Constructor")]
+        public void Constructor_NullUsernama_ShouldThrowException()
+        {
+            //Arrange
+            var username = this._fixture.Generate<string>();
+
+            //Act
+            var exception = Assert.Throws<ArgumentNullException>(() => new LusoSMSClient(null, username));
+
+            //Assert
+            Assert.Equal("username", exception.ParamName);
+        }
+
+        [Fact]
+        [Trait("Category", "Constructor")]
+        public void Constructor_NullPassword_ShouldThrowException()
+        {
+            //Arrange
+            var username = this._fixture.Generate<string>();
+
+            //Act
+            var exception = Assert.Throws<ArgumentNullException>(() => new LusoSMSClient(username, null));
+
+            //Assert
+            Assert.Equal("password", exception.ParamName);
+        }
+
+        [Fact]
         public void BaseUrl_ShouldBeLusoSms()
         {
-            Assert.Equal("http://www.lusosms.com", Client.BaseUrl);
+            Assert.Equal("http://www.lusosms.com", this._client.BaseUrl);
+        }
+
+        [Fact]
+        public void ScheduledSmsManagerUrl_ShoudBeValid()
+        {
+            var expectedUrl = $"http://www.lusosms.com/gerir_agendados.php?username={this._username}&password={this._password}";
+            Assert.Equal(expectedUrl, this._client.ScheduledSmsManagerUrl);
         }
 
         [Fact]
@@ -56,7 +93,7 @@
             this._httpTest.RespondWith(credits.ToString());
 
             //Act
-            var result = await this._client.CheckCredit();
+            var result = await this._client.CheckCreditAsync();
 
             //Assert
             this.AssertCheckCredit();
@@ -64,8 +101,7 @@
         }
 
         [Theory]
-        [InlineData("autenticacao_invalida")]
-        [InlineData("sintaxe_invalida")]
+        [MemberData(nameof(TestDataGenerator.GetCheckCreditInvalidReturnMessages), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Check Credit")]
         public async Task CheckCredit_ShouldThrowException(string returnMessage)
         {
@@ -73,7 +109,7 @@
             this._httpTest.RespondWith(returnMessage);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.CheckCredit());
+            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.CheckCreditAsync());
 
             //Assert
             this.AssertCheckCredit();
@@ -81,43 +117,86 @@
         }
 
         [Theory]
-        [InlineData(true, 400)]
-        [InlineData(false, 200)]
-        [Trait("Category", "Send Sms")]
-        public async Task SendSms_ShouldThrowException_ExceededCharacters(
-            bool longMessage,
-            int messageLength)
+        [MemberData(nameof(TestDataGenerator.GetPricesPerSms), MemberType = typeof(TestDataGenerator))]
+        [Trait("Category", "Calculate Price Per SMS")]
+        public void CalculatePricePerSms_ShouldReturnCorrectPrice(
+            string destination,
+            int package,
+            bool includeVAT,
+            decimal expectedPrice)
+        {
+            //Act
+            var price = this._client.CalculatePricePerSms(
+                destination,
+                package,
+                includeVAT);
+
+            //Assert
+            Assert.Equal(expectedPrice, price);
+        }
+
+        [Theory]
+        [MemberData(nameof(TestDataGenerator.GetPricesPerSmsCampaign), MemberType = typeof(TestDataGenerator))]
+        [Trait("Category", "Calculate Price Per SMS")]
+        public void CalculatePricePerSms_ByCampaign_ShouldReturnCorrectPrice(
+            string destination,
+            uint packageCredits,
+            decimal packagePrice,
+            bool includeVat,
+            decimal expectedPrice)
         {
             //Arrange
-            var message = NLipsum.Core.LipsumGenerator.Generate(2).Substring(0, messageLength);
-            var origin = this._fixture.Generate<string>();
-            var destination = this._fixture.Generate<string>();
+            var creditPackage = new CreditPackage()
+            {
+                Credits = packageCredits,
+                Price = packagePrice
+            };
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSms(message, origin, destination, longMessage));
+            var price = this._client.CalculatePricePerSms(
+                destination,
+                creditPackage,
+                includeVat);
+
+            //Assert
+            Assert.Equal(expectedPrice, price);
+        }
+
+        [Fact]
+        [Trait("Category", "Send Sms")]
+        public async Task SendSms_ShouldThrowException_ExceededCharacters()
+        {
+            //Arrange
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 400);
+            var origin = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+
+            //Act
+            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSmsAsync(message, origin, destination));
 
             //Assert
             Assert.Equal("caracteres_excedidos", exception.Message);
         }
 
         [Theory]
-        [InlineData(SmsTypeEnum.Flash, SmsMethodEnum.GET)]
-        [InlineData(SmsTypeEnum.Flash, SmsMethodEnum.POST)]
-        [InlineData(SmsTypeEnum.Normal, SmsMethodEnum.GET)]
-        [InlineData(SmsTypeEnum.Normal, SmsMethodEnum.POST)]
+        [MemberData(nameof(TestDataGenerator.GetSendSmsData), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Send Sms")]
         public async Task SendSms_ShouldSendSms(
             SmsTypeEnum type,
             SmsMethodEnum method)
         {
             //Arrange
-            var message = NLipsum.Core.LipsumGenerator.Generate(2).Substring(0, 155);
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 155);
             var origin = this._fixture.Generate<string>();
             var destination = this._fixture.Generate<string>();
             this._httpTest.RespondWith("mensagem_enviada");
 
             //Act
-            await this._client.SendSms(message, origin, destination, false, type, method);
+            await this._client.SendSmsAsync(message, origin, destination, type, method);
 
             //Assert
             this.AssertSendSms(
@@ -130,23 +209,49 @@
         }
 
         [Theory]
-        [InlineData("erro_comunicacao")]
-        [InlineData("credito_insuficiente")]
-        [InlineData("autenticacao_invalida")]
-        [InlineData("sintaxe_invalida")]
-        [InlineData("caracteres_excedidos")]
+        [MemberData(nameof(TestDataGenerator.GetSendSmsData), MemberType = typeof(TestDataGenerator))]
+        [Trait("Category", "Send Sms")]
+        public async Task SendSms_ShouldThrowException(
+            SmsTypeEnum type,
+            SmsMethodEnum method)
+        {
+            //Arrange
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 155);
+            var origin = this._fixture.Generate<string>();
+            var destination = this._fixture.Generate<string>();
+            this._httpTest.RespondWith("mensagem_enviada");
+
+            //Act
+            await this._client.SendSmsAsync(message, origin, destination, type, method);
+
+            //Assert
+            this.AssertSendSms(
+                message,
+                origin,
+                destination,
+                0,
+                type,
+                method);
+        }
+
+        [Theory]
+        [MemberData(nameof(TestDataGenerator.GetSendSmsInvalidReturnMessages), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Send Sms")]
         public async Task SendSms_ShouldThrowException(string returnMessage)
         {
             //Arrange
-            var message = NLipsum.Core.LipsumGenerator.Generate(2).Substring(0, 155);
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 155);
             var origin = this._fixture.Generate<string>();
             var destination = this._fixture.Generate<string>();
 
             this._httpTest.RespondWith(returnMessage);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSms(message, origin, destination));
+            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSmsAsync(message, origin, destination));
 
             //Assert
             this.AssertSendSms(
@@ -159,9 +264,94 @@
             Assert.Equal(exception.Message, returnMessage);
         }
 
+        [Fact]
+        [Trait("Category", "Schedule Sms")]
+        public async Task ScheduleSms_ShouldScheduleSms()
+        {
+            //Arrange
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 155);
+            var origin = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var sendDate = DateTime.UtcNow.AddDays(7);
+
+            this._httpTest.RespondWith("mensagem_agendada");
+
+            //Act
+            await this._client.ScheduleSmsAsync(
+                message,
+                origin,
+                destination,
+                sendDate);
+
+            //Assert
+            this.AssertScheduleSms(
+                message,
+                origin,
+                destination,
+                sendDate,
+                0,
+                SmsTypeEnum.Normal);
+        }
+
+        [Theory]
+        [MemberData(nameof(TestDataGenerator.GetScheduleSmsInvalidMessages), MemberType = typeof(TestDataGenerator))]
+        [Trait("Category", "Schedule Sms")]
+        public async Task ScheduleSms_ShouldThrowException(string returnMessage)
+        {
+            //Arrange
+            var message = NLipsum.Core.LipsumGenerator
+                .Generate(2)
+                .Substring(0, 155);
+            var origin = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var sendDate = DateTime.UtcNow.AddDays(7);
+
+            this._httpTest.RespondWith(returnMessage);
+
+            //Act
+            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.ScheduleSmsAsync(
+                message,
+                origin,
+                destination,
+                sendDate));
+
+            //Assert
+            this.AssertScheduleSms(
+                message,
+                origin,
+                destination,
+                sendDate,
+                0,
+                SmsTypeEnum.Normal);
+            Assert.Equal(exception.Message, returnMessage);
+        }
+
+        private void AssertScheduleSms(
+            string message,
+            string origin, 
+            string destination, 
+            DateTime sendDate, 
+            ushort longMessage, 
+            SmsTypeEnum type)
+        {
+            this._httpTest.ShouldHaveCalled(string.Join("/", this._client.BaseUrl, "agendar_sms_get.php"))
+                .WithQueryParamValue("username", this._username)
+                .WithQueryParamValue("password", this._password)
+                .WithQueryParamValue("origem", origin)
+                .WithQueryParamValue("destino", destination)
+                .WithQueryParamValue("mensagem", message)
+                .WithQueryParamValue("mensagemlonga", longMessage)
+                .WithQueryParamValue("tipo", type)
+                .WithQueryParamValue("dataenvio", sendDate.ToString("yyyy|MM|dd|HH|mm|ss"))
+                .WithVerb(HttpMethod.Get)
+                .Times(1);
+        }
+
         private void AssertCheckCredit()
         {
-            this._httpTest.ShouldHaveCalled(string.Join("/", Client.BaseUrl, "ver_credito_get.php"))
+            this._httpTest.ShouldHaveCalled(string.Join("/", this._client.BaseUrl, "ver_credito_get.php"))
                 .WithQueryParamValue("username", this._username)
                 .WithQueryParamValue("password", this._password)
                 .WithVerb(HttpMethod.Get)
@@ -207,7 +397,7 @@
             ushort longMessage,
             string type)
         {
-            this._httpTest.ShouldHaveCalled(string.Join("/", Client.BaseUrl, "enviar_sms_get.php"))
+            this._httpTest.ShouldHaveCalled(string.Join("/", this._client.BaseUrl, "enviar_sms_get.php"))
                 .WithQueryParamValue("username", this._username)
                 .WithQueryParamValue("password", this._password)
                 .WithQueryParamValue("origem", origin)
@@ -226,7 +416,7 @@
             ushort longMessage,
             string type)
         {
-            this._httpTest.ShouldHaveCalled(string.Join("/", Client.BaseUrl, "enviar_sms_post.php"))
+            this._httpTest.ShouldHaveCalled(string.Join("/", this._client.BaseUrl, "enviar_sms_post.php"))
                 //.WithRequestBody($"{{\"username\":{this._username},\"password\":{this._password},\"origem\":{origin},\"destino\": {destination},\"mensagem\":{message},\"mensagemlonga\":{longMessage},\"tipo\":{type}}}")
                 .WithVerb(HttpMethod.Post)
                 .Times(1);

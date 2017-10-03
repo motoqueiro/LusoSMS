@@ -1,12 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>LusoSMS.Client</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Authors>Tiago Monteiro</Authors>
+    <Description>Http client for the LusoSMS api used to send sms in large scale.</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>First release</PackageReleaseNotes>
+    <Copyright>Copyright 2017 (c) LusoSMS. All rights reserved.</Copyright>
+    <PackageTags>lusosms luso sms</PackageTags>
   </PropertyGroup>
-
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DocumentationFile>bin\Release\netstandard2.0\LusoSMS.Client.xml</DocumentationFile>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Flurl" Version="2.5.0" />
     <PackageReference Include="Flurl.Http" Version="1.2.0" />
   </ItemGroup>
-
 </Project>

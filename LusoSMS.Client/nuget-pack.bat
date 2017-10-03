@@ -1,0 +1,1 @@
+dotnet pack LusoSMS.Client.csproj --configuration Release
