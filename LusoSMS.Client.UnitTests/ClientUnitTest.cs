@@ -1,12 +1,13 @@
 ﻿namespace LusoSMS.Client.UnitTests
 {
-    using Flurl.Http.Testing;
-    using LusoSMS.Client.Entities;
-    using LusoSMS.Client.Enums;
-    using SimpleFixture;
     using System;
     using System.Net.Http;
     using System.Threading.Tasks;
+    using Flurl.Http.Testing;
+    using LusoSMS.Client.Entities;
+    using LusoSMS.Client.Enums;
+    using LusoSMS.Client.Exceptions;
+    using SimpleFixture;
     using Xunit;
 
     [Trait("Category", "Unit Tests")]
@@ -90,30 +91,34 @@
                 min = 0,
                 max = 1000
             });
-            this._httpTest.RespondWith(credits.ToString());
+            this._httpTest.RespondWith(credits.ToString("0.000"));
 
             //Act
             var result = await this._client.CheckCreditAsync();
 
             //Assert
             this.AssertCheckCredit();
-            Assert.Equal(credits, result);
+            Assert.Equal(Math.Round(credits, 3), result);
         }
 
         [Theory]
         [MemberData(nameof(TestDataGenerator.GetCheckCreditInvalidReturnMessages), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Check Credit")]
-        public async Task CheckCredit_ShouldThrowException(string returnMessage)
+        public async Task CheckCredit_ShouldThrowException(
+            string returnMessage,
+            Type expectedExeptionType)
         {
             //Arrange
             this._httpTest.RespondWith(returnMessage);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.CheckCreditAsync());
+            var exception = await Assert.ThrowsAsync(
+                expectedExeptionType,
+                async () => await this._client.CheckCreditAsync());
 
             //Assert
             this.AssertCheckCredit();
-            Assert.Equal(returnMessage, exception.Message);
+            Assert.Equal(returnMessage, ((LusoSMSException)exception).ReturnMessage);
         }
 
         [Theory]
@@ -174,10 +179,10 @@
             var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSmsAsync(message, origin, destination));
+            var exception = await Assert.ThrowsAsync<ExceededCharactersException>(async () => await this._client.SendSmsAsync(message, origin, destination));
 
             //Assert
-            Assert.Equal("caracteres_excedidos", exception.Message);
+            Assert.Equal("caracteres_excedidos", exception.ReturnMessage);
         }
 
         [Theory]
@@ -191,36 +196,8 @@
             var message = NLipsum.Core.LipsumGenerator
                 .Generate(2)
                 .Substring(0, 155);
-            var origin = this._fixture.Generate<string>();
-            var destination = this._fixture.Generate<string>();
-            this._httpTest.RespondWith("mensagem_enviada");
-
-            //Act
-            await this._client.SendSmsAsync(message, origin, destination, type, method);
-
-            //Assert
-            this.AssertSendSms(
-                message,
-                origin,
-                destination,
-                0,
-                type,
-                method);
-        }
-
-        [Theory]
-        [MemberData(nameof(TestDataGenerator.GetSendSmsData), MemberType = typeof(TestDataGenerator))]
-        [Trait("Category", "Send Sms")]
-        public async Task SendSms_ShouldThrowException(
-            SmsTypeEnum type,
-            SmsMethodEnum method)
-        {
-            //Arrange
-            var message = NLipsum.Core.LipsumGenerator
-                .Generate(2)
-                .Substring(0, 155);
-            var origin = this._fixture.Generate<string>();
-            var destination = this._fixture.Generate<string>();
+            var origin = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
             this._httpTest.RespondWith("mensagem_enviada");
 
             //Act
@@ -239,19 +216,23 @@
         [Theory]
         [MemberData(nameof(TestDataGenerator.GetSendSmsInvalidReturnMessages), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Send Sms")]
-        public async Task SendSms_ShouldThrowException(string returnMessage)
+        public async Task SendSms_ShouldThrowException(
+            string returnMessage,
+            Type expectedExceptionType)
         {
             //Arrange
             var message = NLipsum.Core.LipsumGenerator
                 .Generate(2)
                 .Substring(0, 155);
-            var origin = this._fixture.Generate<string>();
-            var destination = this._fixture.Generate<string>();
+            var origin = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
+            var destination = TestDataGenerator.GeneratePhoneNumber(CountriesEnum.Portugal);
 
             this._httpTest.RespondWith(returnMessage);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.SendSmsAsync(message, origin, destination));
+            var exception = await Assert.ThrowsAsync(
+                expectedExceptionType,
+                async () => await this._client.SendSmsAsync(message, origin, destination));
 
             //Assert
             this.AssertSendSms(
@@ -261,7 +242,7 @@
                 0,
                 SmsTypeEnum.Normal,
                 SmsMethodEnum.POST);
-            Assert.Equal(exception.Message, returnMessage);
+            Assert.Equal(returnMessage, ((LusoSMSException)exception).ReturnMessage);
         }
 
         [Fact]
@@ -298,7 +279,9 @@
         [Theory]
         [MemberData(nameof(TestDataGenerator.GetScheduleSmsInvalidMessages), MemberType = typeof(TestDataGenerator))]
         [Trait("Category", "Schedule Sms")]
-        public async Task ScheduleSms_ShouldThrowException(string returnMessage)
+        public async Task ScheduleSms_ShouldThrowException(
+            string returnMessage,
+            Type expectedExceptionType)
         {
             //Arrange
             var message = NLipsum.Core.LipsumGenerator
@@ -311,11 +294,13 @@
             this._httpTest.RespondWith(returnMessage);
 
             //Act
-            var exception = await Assert.ThrowsAsync<Exception>(async () => await this._client.ScheduleSmsAsync(
-                message,
-                origin,
-                destination,
-                sendDate));
+            var exception = await Assert.ThrowsAsync(
+                expectedExceptionType,
+                async () => await this._client.ScheduleSmsAsync(
+                    message,
+                    origin,
+                    destination,
+                    sendDate));
 
             //Assert
             this.AssertScheduleSms(
@@ -325,15 +310,15 @@
                 sendDate,
                 0,
                 SmsTypeEnum.Normal);
-            Assert.Equal(exception.Message, returnMessage);
+            Assert.Equal(returnMessage, ((LusoSMSException)exception).ReturnMessage);
         }
 
         private void AssertScheduleSms(
             string message,
-            string origin, 
-            string destination, 
-            DateTime sendDate, 
-            ushort longMessage, 
+            string origin,
+            string destination,
+            DateTime sendDate,
+            ushort longMessage,
             SmsTypeEnum type)
         {
             this._httpTest.ShouldHaveCalled(string.Join("/", this._client.BaseUrl, "agendar_sms_get.php"))

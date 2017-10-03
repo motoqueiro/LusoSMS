@@ -223,7 +223,7 @@
 
             if (double.TryParse(result, out var credits))
             {
-                return credits;
+                return Math.Round(credits, 3);
             }
 
             this.ResolveException(result);

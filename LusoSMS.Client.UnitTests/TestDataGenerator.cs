@@ -8,6 +8,7 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Text;
+    using LusoSMS.Client.Exceptions;
 
     internal static class TestDataGenerator
     {
@@ -20,25 +21,25 @@
 
         public static IEnumerable<object[]> GetCheckCreditInvalidReturnMessages()
         {
-            yield return new object[] { "autenticacao_invalida" };
-            yield return new object[] { "sintaxe_invalida" };
+            yield return new object[] { "autenticacao_invalida", typeof(InvalidAuthenticationException) };
+            yield return new object[] { "sintaxe_invalida", typeof(InvalidSintaxException) };
         }
 
         public static IEnumerable<object[]> GetSendSmsInvalidReturnMessages()
         {
-            yield return new object[] { "erro_comunicacao" };
-            yield return new object[] { "credito_insuficiente" };
-            yield return new object[] { "autenticacao_invalida" };
-            yield return new object[] { "sintaxe_invalida" };
-            yield return new object[] { "caracteres_excedidos" };
+            yield return new object[] { "erro_comunicacao", typeof(CommunicationErrorException) };
+            yield return new object[] { "credito_insuficiente", typeof(InsufficientCreditsException) };
+            yield return new object[] { "autenticacao_invalida", typeof(InvalidAuthenticationException) };
+            yield return new object[] { "sintaxe_invalida", typeof(InvalidSintaxException) };
+            yield return new object[] { "caracteres_excedidos", typeof(ExceededCharactersException) };
         }
 
         public static IEnumerable<object[]> GetScheduleSmsInvalidMessages()
         {
-            yield return new object[] { "autenticacao_invalida" };
-            yield return new object[] { "sintaxe_invalida" };
-            yield return new object[] { "caracteres_excedidos" };
-            yield return new object[] { "data_invalida" };
+            yield return new object[] { "autenticacao_invalida", typeof(InvalidAuthenticationException) };
+            yield return new object[] { "sintaxe_invalida", typeof(InvalidSintaxException) };
+            yield return new object[] { "caracteres_excedidos", typeof(ExceededCharactersException) };
+            yield return new object[] { "data_invalida", typeof(InvalidDateException) };
         }
 
         public static IEnumerable<object[]> GetSendSmsData()
